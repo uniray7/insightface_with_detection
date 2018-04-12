@@ -1,32 +1,54 @@
-import argparse
-import redis
 import cv2
-import numpy as np
-import tensorflow as tf
-import face_embedding
-import uuid
-import json
+import tkinter as tki
+import sys
+import time
+import uuid, redis, json
+from capture import Capturer
+from recog_utils import get_feature
 
-parser = argparse.ArgumentParser(description='Create user')
-parser.add_argument('username', metavar='username', type=str, 
-                            help='username for creation')
-parser.add_argument('img_path', metavar='img_path', type=str, 
-                            help='the image of user')
-parser.add_argument('--image-size', default='112,112', help='')
-parser.add_argument('--model', default='./models/model-r50-am-lfw/model,0', help='path to load model.')
-parser.add_argument('--gpu', default=0, type=int, help='gpu id')
-parser.add_argument('--det', default=2, type=int, help='mtcnn option, 2 means using R+O, else using O')
-parser.add_argument('--flip', default=0, type=int, help='whether do lr flip aug')
-parser.add_argument('--threshold', default=1.24, type=float, help='ver dist threshold')
+STATUS = {}
+STATUS['face_is_valid'] = False
+STATUS['valid_face'] = None
 
-args = parser.parse_args()
+def showFrame():
+  STATUS['face_is_valid'], imgtk, STATUS['valid_face'] = capturer.capAndAnal()
+  lmain.imgtk = imgtk
+  lmain.configure(image=imgtk)
+  lmain.after(30, showFrame)
+
+def takeSnapshot():
+  name = inputTxt.get()
+  if STATUS['face_is_valid']:
+    feature = get_feature(STATUS['valid_face'])
+    key = uuid.uuid1()
+    value = json.dumps({'name': name, 'feature': feature.tolist()})
+
+    redis_cli.set(key, value)
+    print('success')
+  print(name)
+
+
+FRAME = None
 redis_cli = redis.Redis(host='localhost', port=16380, decode_responses=True)
-model = face_embedding.FaceModel(args)
+capturer = Capturer()
 
-img = cv2.imread(args.img_path)
-feature = model.get_feature(img)
+tkWindow = tki.Tk()
+tkWindow.wm_title("Capture")
+imgFrame = tki.Frame(tkWindow, width=600, height=500)
+imgFrame.grid(row=0, column=0, padx=10, pady=2)
 
-key = uuid.uuid1()
-value = json.dumps({'name': args.username, 'feature': feature.tolist()})
+lmain = tki.Label(imgFrame)
+lmain.grid(row=0, column=0)
 
-redis_cli.set(key, value)
+controlFrame = tki.Frame(tkWindow, width=100, height=500)
+controlFrame.grid(row=0, column=1, padx=10, pady=2)
+
+inputTxt = tki.Entry(controlFrame)
+inputTxt.grid(row=0, column=0, padx=10, pady=2)
+
+btn = tki.Button(controlFrame, text="Capture Face!",command=takeSnapshot)
+btn.grid(row=2, column=0, padx=10, pady=1)
+
+
+showFrame()
+tkWindow.mainloop() 
